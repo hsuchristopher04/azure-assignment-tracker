@@ -1,6 +1,6 @@
 # Azure Assignment Tracker
 
-## Goal
+## Goal 
 Build a cloud-based assignment tracker where users can create, view, update, delete, and filter assignments.
 
 ## Core Features
