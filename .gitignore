@@ -9,6 +9,13 @@ dist/
 API/local.settings.json
 api/local.settings.json
 
+# local Azurite emulator state
+AzuriteConfig
+__azurite_db*.json
+__blobstorage__/
+__queuestorage__/
+.azurite/
+
 # logs
 npm-debug.log*
 yarn-debug.log*

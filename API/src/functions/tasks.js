@@ -33,26 +33,27 @@ app.http('getTasks', {
   methods: ['GET'],
   authLevel: 'anonymous',
   route: 'tasks',
-  handler: async (request) => {
+  handler: async (request, context) => {
     const partitionKey = getUserPartitionKey(request)
     if (!partitionKey) return unauthorizedResponse()
 
-    await ensureTasksTable()
+    try {
+      await ensureTasksTable()
 
-    const tasks = []
-    const entities = tableClient.listEntities({
-      queryOptions: {
-        filter: `PartitionKey eq '${partitionKey}'`
+      const tasks = []
+      const entities = tableClient.listEntities({
+        queryOptions: {
+          filter: `PartitionKey eq '${partitionKey}'`
+        }
+      })
+
+      for await (const entity of entities) {
+        tasks.push(fromTaskEntity(entity))
       }
-    })
 
-    for await (const entity of entities) {
-      tasks.push(fromTaskEntity(entity))
-    }
-
-    return {
-      status: 200,
-      jsonBody: tasks
+      return { status: 200, jsonBody: tasks }
+    } catch (error) {
+      return storageErrorResponse(error, context, 'list tasks')
     }
   }
 })
@@ -61,7 +62,7 @@ app.http('createTask', {
   methods: ['POST'],
   authLevel: 'anonymous',
   route: 'tasks',
-  handler: async (request) => {
+  handler: async (request, context) => {
     const partitionKey = getUserPartitionKey(request)
     if (!partitionKey) return unauthorizedResponse()
 
@@ -71,19 +72,19 @@ app.http('createTask', {
     const validation = validateTask(parsedBody.value)
     if (validation.errors) return validationResponse(validation.errors)
 
-    await ensureTasksTable()
-    const id = randomUUID()
+    try {
+      await ensureTasksTable()
 
-    const entity = toTaskEntity({
-      id,
-      ...validation.value
-    }, partitionKey)
+      const entity = toTaskEntity({
+        id: randomUUID(),
+        ...validation.value
+      }, partitionKey)
 
-    await tableClient.createEntity(entity)
+      await tableClient.createEntity(entity)
 
-    return {
-      status: 201,
-      jsonBody: fromTaskEntity(entity)
+      return { status: 201, jsonBody: fromTaskEntity(entity) }
+    } catch (error) {
+      return storageErrorResponse(error, context, 'create task')
     }
   }
 })
@@ -92,7 +93,7 @@ app.http('updateTask', {
   methods: ['PUT'],
   authLevel: 'anonymous',
   route: 'tasks/{id}',
-  handler: async (request) => {
+  handler: async (request, context) => {
     const partitionKey = getUserPartitionKey(request)
     if (!partitionKey) return unauthorizedResponse()
 
@@ -102,37 +103,36 @@ app.http('updateTask', {
     const validation = validateTask(parsedBody.value, { partial: true })
     if (validation.errors) return validationResponse(validation.errors)
 
-    await ensureTasksTable()
-
     const { id } = request.params
     const body = validation.value
 
-    let existing
     try {
-      existing = await tableClient.getEntity(partitionKey, id)
-    } catch {
-      return {
-        status: 404,
-        jsonBody: { error: 'Task not found' }
+      await ensureTasksTable()
+
+      let existing
+      try {
+        existing = await tableClient.getEntity(partitionKey, id)
+      } catch (error) {
+        if (isResourceNotFound(error)) return notFoundResponse()
+        throw error
       }
-    }
 
-    const updatedEntity = {
-      partitionKey,
-      rowKey: id,
-      title: body.title ?? existing.title ?? '',
-      course: body.course ?? existing.course ?? '',
-      dueDate: body.dueDate ?? existing.dueDate ?? '',
-      priority: body.priority ?? existing.priority ?? 'Medium',
-      status: body.status ?? existing.status ?? 'Not Started',
-      notes: body.notes ?? existing.notes ?? ''
-    }
+      const updatedEntity = {
+        partitionKey,
+        rowKey: id,
+        title: body.title ?? existing.title ?? '',
+        course: body.course ?? existing.course ?? '',
+        dueDate: body.dueDate ?? existing.dueDate ?? '',
+        priority: body.priority ?? existing.priority ?? 'Medium',
+        status: body.status ?? existing.status ?? 'Not Started',
+        notes: body.notes ?? existing.notes ?? ''
+      }
 
-    await tableClient.upsertEntity(updatedEntity, 'Replace')
+      await tableClient.upsertEntity(updatedEntity, 'Replace')
 
-    return {
-      status: 200,
-      jsonBody: fromTaskEntity(updatedEntity)
+      return { status: 200, jsonBody: fromTaskEntity(updatedEntity) }
+    } catch (error) {
+      return storageErrorResponse(error, context, 'update task')
     }
   }
 })
@@ -141,25 +141,18 @@ app.http('deleteTask', {
   methods: ['DELETE'],
   authLevel: 'anonymous',
   route: 'tasks/{id}',
-  handler: async (request) => {
+  handler: async (request, context) => {
     const partitionKey = getUserPartitionKey(request)
     if (!partitionKey) return unauthorizedResponse()
 
-    await ensureTasksTable()
-
-    const { id } = request.params
-
     try {
-      await tableClient.deleteEntity(partitionKey, id)
-    } catch {
-      return {
-        status: 404,
-        jsonBody: { error: 'Task not found' }
-      }
-    }
+      await ensureTasksTable()
+      await tableClient.deleteEntity(partitionKey, request.params.id)
 
-    return {
-      status: 204
+      return { status: 204 }
+    } catch (error) {
+      if (isResourceNotFound(error)) return notFoundResponse()
+      return storageErrorResponse(error, context, 'delete task')
     }
   }
 })
@@ -186,10 +179,21 @@ async function parseJsonBody(request) {
   }
 }
 
+function isResourceNotFound(error) {
+  return error?.statusCode === 404 || error?.code === 'ResourceNotFound'
+}
+
 function unauthorizedResponse() {
   return {
     status: 401,
     jsonBody: { error: 'Authentication required.' }
+  }
+}
+
+function notFoundResponse() {
+  return {
+    status: 404,
+    jsonBody: { error: 'Task not found.' }
   }
 }
 
@@ -200,5 +204,33 @@ function validationResponse(details) {
       error: 'Invalid task data.',
       details
     }
+  }
+}
+
+function storageErrorResponse(error, context, operation) {
+  context.error('Azure Table Storage operation failed.', {
+    operation,
+    code: error?.code || 'Unknown',
+    statusCode: error?.statusCode || 500
+  })
+
+  if (error?.statusCode === 401 || error?.statusCode === 403) {
+    return {
+      status: 503,
+      jsonBody: { error: 'The assignment store is temporarily unavailable.' }
+    }
+  }
+
+  if (error?.statusCode === 429) {
+    return {
+      status: 503,
+      headers: { 'Retry-After': '5' },
+      jsonBody: { error: 'The assignment store is busy. Please try again.' }
+    }
+  }
+
+  return {
+    status: 500,
+    jsonBody: { error: 'Unable to complete the storage operation.' }
   }
 }

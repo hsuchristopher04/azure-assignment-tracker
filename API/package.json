@@ -2,13 +2,14 @@
   "name": "assignment-tracker-api",
   "version": "1.0.0",
   "description": "",
-  "main": "src/functions/ping.js",
+  "main": "src/functions/*.js",
   "scripts": {
     "start": "func start",
     "test": "node --test"
   },
   "dependencies": {
     "@azure/data-tables": "^13.3.2",
-    "@azure/functions": "^4.x"
+    "@azure/functions": "^4.x",
+    "@azure/identity": "^4.13.1"
   }
 }
