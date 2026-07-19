@@ -1,12 +1,12 @@
 const { app } = require('@azure/functions')
 const { randomUUID } = require('crypto')
 const { tableClient, ensureTasksTable } = require('../lib/tableClient')
+const { getAuthenticatedUser, partitionKeyForUser } = require('../lib/auth')
+const { validateTask } = require('../lib/taskValidation')
 
-const PARTITION_KEY = 'TASK'
-
-function toTaskEntity(task) {
+function toTaskEntity(task, partitionKey) {
   return {
-    partitionKey: PARTITION_KEY,
+    partitionKey,
     rowKey: task.id,
     title: task.title ?? '',
     course: task.course ?? '',
@@ -33,16 +33,21 @@ app.http('getTasks', {
   methods: ['GET'],
   authLevel: 'anonymous',
   route: 'tasks',
-  handler: async () => {
+  handler: async (request) => {
+    const partitionKey = getUserPartitionKey(request)
+    if (!partitionKey) return unauthorizedResponse()
+
     await ensureTasksTable()
 
     const tasks = []
-    const entities = tableClient.listEntities()
+    const entities = tableClient.listEntities({
+      queryOptions: {
+        filter: `PartitionKey eq '${partitionKey}'`
+      }
+    })
 
     for await (const entity of entities) {
-      if (entity.partitionKey === PARTITION_KEY) {
-        tasks.push(fromTaskEntity(entity))
-      }
+      tasks.push(fromTaskEntity(entity))
     }
 
     return {
@@ -57,20 +62,22 @@ app.http('createTask', {
   authLevel: 'anonymous',
   route: 'tasks',
   handler: async (request) => {
-    await ensureTasksTable()
+    const partitionKey = getUserPartitionKey(request)
+    if (!partitionKey) return unauthorizedResponse()
 
-    const body = await request.json()
+    const parsedBody = await parseJsonBody(request)
+    if (parsedBody.error) return parsedBody.error
+
+    const validation = validateTask(parsedBody.value)
+    if (validation.errors) return validationResponse(validation.errors)
+
+    await ensureTasksTable()
     const id = randomUUID()
 
     const entity = toTaskEntity({
       id,
-      title: body.title,
-      course: body.course,
-      dueDate: body.dueDate,
-      priority: body.priority,
-      status: body.status,
-      notes: body.notes
-    })
+      ...validation.value
+    }, partitionKey)
 
     await tableClient.createEntity(entity)
 
@@ -86,14 +93,23 @@ app.http('updateTask', {
   authLevel: 'anonymous',
   route: 'tasks/{id}',
   handler: async (request) => {
+    const partitionKey = getUserPartitionKey(request)
+    if (!partitionKey) return unauthorizedResponse()
+
+    const parsedBody = await parseJsonBody(request)
+    if (parsedBody.error) return parsedBody.error
+
+    const validation = validateTask(parsedBody.value, { partial: true })
+    if (validation.errors) return validationResponse(validation.errors)
+
     await ensureTasksTable()
 
     const { id } = request.params
-    const body = await request.json()
+    const body = validation.value
 
     let existing
     try {
-      existing = await tableClient.getEntity(PARTITION_KEY, id)
+      existing = await tableClient.getEntity(partitionKey, id)
     } catch {
       return {
         status: 404,
@@ -102,7 +118,7 @@ app.http('updateTask', {
     }
 
     const updatedEntity = {
-      partitionKey: PARTITION_KEY,
+      partitionKey,
       rowKey: id,
       title: body.title ?? existing.title ?? '',
       course: body.course ?? existing.course ?? '',
@@ -126,12 +142,15 @@ app.http('deleteTask', {
   authLevel: 'anonymous',
   route: 'tasks/{id}',
   handler: async (request) => {
+    const partitionKey = getUserPartitionKey(request)
+    if (!partitionKey) return unauthorizedResponse()
+
     await ensureTasksTable()
 
     const { id } = request.params
 
     try {
-      await tableClient.deleteEntity(PARTITION_KEY, id)
+      await tableClient.deleteEntity(partitionKey, id)
     } catch {
       return {
         status: 404,
@@ -144,3 +163,42 @@ app.http('deleteTask', {
     }
   }
 })
+
+function getUserPartitionKey(request) {
+  const user = getAuthenticatedUser(request)
+  return user ? partitionKeyForUser(user.id) : null
+}
+
+async function parseJsonBody(request) {
+  const contentType = request.headers.get('content-type') || ''
+  if (!contentType.toLowerCase().startsWith('application/json')) {
+    return {
+      error: validationResponse(['Content-Type must be application/json.'])
+    }
+  }
+
+  try {
+    return { value: await request.json() }
+  } catch {
+    return {
+      error: validationResponse(['Request body must contain valid JSON.'])
+    }
+  }
+}
+
+function unauthorizedResponse() {
+  return {
+    status: 401,
+    jsonBody: { error: 'Authentication required.' }
+  }
+}
+
+function validationResponse(details) {
+  return {
+    status: 400,
+    jsonBody: {
+      error: 'Invalid task data.',
+      details
+    }
+  }
+}
