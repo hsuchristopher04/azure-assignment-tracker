@@ -92,16 +92,16 @@ The application follows a serverless architecture hosted on Microsoft Azure.
 ```
 React Frontend
         │
-        ▼
+        V
 Azure Static Web Apps
         │
-        ▼
+        V
 Azure Functions REST API
         │
-        ▼
+        V
 Azure Table Storage
         │
-        ▼
+        V
 User-specific data partitioning based on Microsoft Authentication
 ```
 
