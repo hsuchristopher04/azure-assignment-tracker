@@ -1,60 +1,106 @@
 # Azure Assignment Tracker
+A cloud-based assignment management app built with React, Azure Static Web Apps, Azure Functions, and Azure Table Storage.
 
-## Goal 
-Build a cloud-based assignment tracker where users can create, view, update, delete, and filter assignments.
+## The Azure Assignment Tracker helps students organize coursework in one place by allowing them to:
+- Create and manage assignments
+- Track progress from Not Started -> In Progress -> Done
+- Organize assignments by course
+- Set priorities and due dates
+- Store assignments securely in the cloud
+- Keep every user's assignments private through Microsoft authentication
 
-## Core Features
-- View all assignments
-- Add a new assignment
-- Update assignment status
-- Delete an assignment
-- Filter by course or status
+## First-Time User Guide
+Step 1 – Open the application
 
-## Tech Stack
-- Frontend: React or HTML/CSS/JS
-- Backend: Azure Functions
-- Storage: Azure Table Storage
-- Hosting: Azure Static Web Apps
+![Landing Page](images/landing-page.png)
 
-## Task Model
-- id
-- title
-- course
-- dueDate
-- priority
-- status
-- notes
+Step 2 – Sign in with your personal Microsoft account
 
-## Storage Configuration
+![Personal Account](images/personal-account.png)
 
-The API supports two mutually exclusive Azure Table Storage authentication modes.
+- Your account is only used to identify you.
+- Each authenticated user has their own isolated assignment storage.
 
-### Static Web Apps managed API or local Azurite
+Step 3 - Create your first assignment
 
-Set these backend environment variables in Azure Static Web Apps or
-`API/local.settings.json`:
+![Create Assignment](images/add-assignment.png)
 
-```text
-TABLES_CONNECTION_STRING=<storage connection string or UseDevelopmentStorage=true>
-TASKS_TABLE_NAME=Tasks
+Step 4 - Manage assignments
+
+![Manage Assignments](images/manage-assignment.png)
+
+- Edit: Click this to change any aspect of the assignment that has changed. 
+- Delete: Click this to delete any assignments that are outdated or unnecessary.  
+- Status Dropdown: Click this to update the status of the assignment between 3 options: Done, In Progress, Not Started. 
+- Priority Badges: Indicates the importance/urgency level of each assignment.
+
+Step 4.5 - Editing Assignments
+
+After clicking edit, the add assignment section will convert to the edit section. 
+
+![Edit Assignment](images/edit-assignment.png)
+
+Step 5 - Filtering Assignments
+
+There are three options to filter assignments by: Course, Progress, Priority.
+
+- Filter by course name:
+![Fiter By Course Name](filter-by-course.png)
+
+- Filter by progress: 
+![Filter by Progress](filter-by-progress.png)
+
+- Filter by Priority:
+![Filter by Priority](filter-by-priority.png)
+
+Step 6 – Get to Work...
+
+## Privacy
+The Azure Assignment Tracker uses **Microsoft Authentication** to provide each user with a secure, personalized experience.
+
+After signing in, every user is assigned a unique storage partition in Azure Table Storage. All assignment data is isolated by user, ensuring that:
+
+- Your assignments are private and cannot be viewed by other users.
+- All create, read, update, and delete (CRUD) operations are performed only on your own data.
+- Authentication is required before accessing assignment information.
+
+## Technologies Used
+
+### Frontend
+- React
+- JavaScript (ES6+)
+- HTML5
+- CSS3
+
+### Backend
+- Azure Functions
+- Node.js
+- RESTful API
+
+### Cloud Services
+- Azure Static Web Apps
+- Azure Table Storage
+- Microsoft Authentication (Azure Static Web Apps Authentication)
+
+## Architecture
+
+The application follows a serverless architecture hosted on Microsoft Azure.
+
+```
+React Frontend
+        │
+        ▼
+Azure Static Web Apps
+        │
+        ▼
+Azure Functions REST API
+        │
+        ▼
+Azure Table Storage
+        │
+        ▼
+User-specific data partitioning based on Microsoft Authentication
 ```
 
-Never expose `TABLES_CONNECTION_STRING` to the frontend or commit
-`local.settings.json`. In Azure, add it under the Static Web App's **Environment
-variables** settings.
+Each authenticated user interacts only with their own assignments, providing secure and isolated cloud storage.
 
-### Keyless managed identity
-
-When the API runs in an identity-enabled Azure Functions backend, omit
-`TABLES_CONNECTION_STRING` and set:
-
-```text
-TABLES_ACCOUNT_NAME=<storage account name>
-TASKS_TABLE_NAME=Tasks
-```
-
-Enable a managed identity on the Function App and grant it the **Storage Table
-Data Contributor** role scoped to the storage account. The API then uses
-`DefaultAzureCredential`; no storage account key is required. A bring-your-own
-Functions backend requires an Azure Static Web Apps plan that supports linked
-backends and a separate Functions deployment workflow.
