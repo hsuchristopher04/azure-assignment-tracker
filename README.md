@@ -46,15 +46,15 @@ There are three options to filter assignments by: Course, Progress, Priority.
 
 - Filter by course name:
 
-![Filter By Course Name](filter-by-course.png)
+![Filter By Course Name](images/filter-by-course.png)
 
 - Filter by progress:
 
-![Filter by Progress](filter-by-progress.png)
+![Filter by Progress](images/filter-by-progress.png)
 
 - Filter by Priority:
 
-![Filter by Priority](filter-by-priority.png)
+![Filter by Priority](images/filter-by-priority.png)
 
 Step 6 – Get to Work...
 
