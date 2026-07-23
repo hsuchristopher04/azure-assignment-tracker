@@ -10,7 +10,7 @@ A cloud-based assignment management app built with React, Azure Static Web Apps,
 - Keep every user's assignments private through Microsoft authentication
 
 ## First-Time User Guide
-Step 1 – Open the application
+Step 1 – Open the application through the link in the about section on GitHub. 
 
 ![Landing Page](images/landing-page.png)
 
@@ -27,7 +27,7 @@ Step 3 - Create your first assignment
 
 Step 4 - Manage assignments
 
-![Manage Assignments](images/manage-assignment.png)
+![Manage Assignments](images/manage-assignments.png)
 
 - Edit: Click this to change any aspect of the assignment that has changed. 
 - Delete: Click this to delete any assignments that are outdated or unnecessary.  
